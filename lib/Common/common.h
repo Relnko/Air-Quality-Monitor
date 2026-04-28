@@ -31,8 +31,8 @@ Y
 #define BUTTONexit_Y 10 // Exit
 #define BUTTONsyshealth_X 140 // SystemHealth
 
-extern int Foregroundcolor;
-extern int Backgroundcolor;
-extern bool Darkmode;
+//extern int foregroundcolor;
+//extern int backgroundcolor;
+//extern bool darkmode;
 
 #endif // common_H_
