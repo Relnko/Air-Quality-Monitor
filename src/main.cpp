@@ -1,107 +1,238 @@
-#include <Arduino.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_ILI9341.h>
-#include <XPT2046_Touchscreen.h>
+#include <Arduino.h>
 #include <SensirionI2cScd4x.h>
+#include <XPT2046_Touchscreen.h>
 #include <common.h>
 
 SensirionI2cScd4x scd40;
 Adafruit_ILI9341 tft = Adafruit_ILI9341(TFT_CS, TFT_DC, TFT_RST);
-XPT2046_Touchscreen ts(Touch_CS, Touch_IRQ);
+XPT2046_Touchscreen touch(Touch_CS, Touch_IRQ);
 
 GFXcanvas1 SCD40canvas(7 * 12, 3 * 16);
+/* max 7 characters at size 2 (12px) and 3 rows at size 2 (16px)
+XX.XX°C
+XX.XX%
+XXXXppm
+*/
+
+// ------------------------------------------------------
+// Global variables
+// ------------------------------------------------------
 
 uint8_t foregroundcolor = 0xFFFF;
 uint8_t backgroundcolor = 0x0000;
 bool darkmode = true;
-
-void PrintUint64(uint64_t &value);
-
-#ifdef NO_ERROR
-#undef NO_ERROR
-#endif
-#define NO_ERROR 0
-
 static char errorMessage[64];
 static int16_t error;
+unsigned long ts = 0;
 
-void setup()
-{
-    Serial.begin(9600);
-    while (!Serial)
-        ;
+// ------------------------------------------------------
+// State structure
+// ------------------------------------------------------
 
-    Wire.begin();
+struct State;
 
-    uint64_t serialnumber = 0;
+// Function pointer type:
+// Pointer to a function returning State*
+typedef State *(*StateHandler)(void);
 
-    scd40.begin(Wire, SCD40_I2C_ADDR_62);
+// State object
+struct State {
+  StateHandler handler;
+  const char *name;
+};
 
-    uint64_t serialNumber = 0;
-    delay(30);
-    // Ensure scd40 is in clean state
-    error = scd40.wakeUp();
-    if (error != NO_ERROR)
-    {
-        Serial.print("Error trying to execute wakeUp(): ");
-        errorToString(error, errorMessage, sizeof errorMessage);
-        Serial.println(errorMessage);
-    }
-    error = scd40.stopPeriodicMeasurement();
-    if (error != NO_ERROR)
-    {
-        Serial.print("Error trying to execute stopPeriodicMeasurement(): ");
-        errorToString(error, errorMessage, sizeof errorMessage);
-        Serial.println(errorMessage);
-    }
-    error = scd40.reinit();
-    if (error != NO_ERROR)
-    {
-        Serial.print("Error trying to execute reinit(): ");
-        errorToString(error, errorMessage, sizeof errorMessage);
-        Serial.println(errorMessage);
-    }
-    // Read out information about the scd40
-    error = scd40.getSerialNumber(serialNumber);
-    if (error != NO_ERROR)
-    {
-        Serial.print("Error trying to execute getSerialNumber(): ");
-        errorToString(error, errorMessage, sizeof errorMessage);
-        Serial.println(errorMessage);
-        return;
-    }
-    Serial.print("serial number: ");
-    PrintUint64(serialNumber);
-    Serial.println();
-    // Start periodic measurements (5sec interval)
-    error = scd40.startPeriodicMeasurement();
-    if (error != NO_ERROR)
-    {
-        Serial.print("Error trying to execute startPeriodicMeasurement(): ");
-        errorToString(error, errorMessage, sizeof errorMessage);
-        Serial.println(errorMessage);
-        return;
-    }
+// ------------------------------------------------------
+// Forward declarations
+// ------------------------------------------------------
 
-    tft.begin();
-    tft.setRotation(3);
-    tft.cp437(true);
-    tft.fillScreen(0x0000);         // Fills the Screen black
+void PrintUint64(uint64_t &value);
+State *mainscreenHandler(void);
+State *systemstatusscreenHandler(void);
+State *airqualitymonitorscreenHandler(void);
+State *touchcheckingHandler(void);
 
-    SCD40canvas.setTextWrap(false); // In case the Text on the canvas exceeds the canvas it doesnt get wrapped around into the next line
-    SCD40canvas.cp437(true);
+// ------------------------------------------------------
+// State objects
+// ------------------------------------------------------
 
-    ts.begin();
-    ts.setRotation(1);
+State mainScreenState = {
+    mainscreenHandler, 
+    "MAIN_SCREEN"
+};
+State systemStatusScreenState = {
+    systemstatusscreenHandler, 
+    "SYSTEMSTATUS_SCREEN"
+};
+State airQualityMonitorScreenState = {
+    airqualitymonitorscreenHandler, 
+    "AIRQUALITYMONITOR_SCREEN"
+};
+State touchCheckingState = {
+    touchcheckingHandler, 
+    "TOUCHCHECKING"
+};
+
+// Current active state
+State *currentState = &mainScreenState;
+
+// ------------------------------------------------------
+// Helper functions
+// ------------------------------------------------------
+
+/* Updates the readings of the SCD40 Sensor if data is ready to be received*/
+void updateSCD40() {}
+
+/* Updates all the sensor and display IC data if in the systemstatus screen*/
+void readSensorStats() {}
+
+/* Maps the coordinates to the screen*/
+void touchMapping() {}
+
+/* Prints all the static text and lines on the selected screen*/
+void printStaticText() {}
+
+/* Reverses the front- and background colors*/
+void switchDarkmode() {}
+
+/* Either reads or writes the given data from or to the SD-Card*/
+void readWriteSDcard() {}
+
+// ------------------------------------------------------
+// MAIN_SCREEN State
+// ------------------------------------------------------
+
+State *mainscreenHandler() {
+    printStaticText();
+    updateSCD40();
+
+    return &mainScreenState;
 }
 
-void loop()
-{
+// ------------------------------------------------------
+// SYSTEMSTATUS_SCREEN State
+// ------------------------------------------------------
+
+State *systemstatusscreenHandler() {
+    printStaticText();
+    readSensorStats();
+
+    return &systemStatusScreenState;
 }
 
-void PrintUint64(uint64_t &value)
-{
-    Serial.print("0x");
-    Serial.print((uint32_t)(value >> 32), HEX);
-    Serial.print((uint32_t)(value & 0xFFFFFFFF), HEX);
+// ------------------------------------------------------
+// AIRQUALITYMONITOR_SCREEN State
+// ------------------------------------------------------
+
+State *airqualitymonitorscreenHandler() {
+    printStaticText();
+    updateSCD40();
+
+    return &airQualityMonitorScreenState;
+}
+
+// ------------------------------------------------------
+// AIRQUALITYMONITOR_SCREEN State
+// ------------------------------------------------------
+
+State *touchcheckingHandler() {
+    touchMapping();
+
+    return &touchCheckingState;
+}
+
+// ------------------------------------------------------
+// State machine update
+// ------------------------------------------------------
+
+void fsmupdate() {
+    State *previousState = currentState;
+
+    currentState = currentState->handler();
+
+    if (currentState != previousState) {
+        Serial.print("State changed to: ");
+        Serial.println(currentState->name);
+    }
+}
+
+void setup() {
+  // --------Bus Setup--------
+
+  Serial.begin(9600);
+  while (!Serial)
+    ;
+
+  Wire.begin();
+
+  // --------SCD40 Setup--------
+
+  uint64_t serialnumber = 0;
+  scd40.begin(Wire, SCD40_I2C_ADDR_62);
+  delay(30);
+  
+  // Stops the sensor from taking measurements
+  error = scd40.stopPeriodicMeasurement();
+  if (error != NO_ERROR) {
+    Serial.print("Error trying to execute stopPeriodicMeasurement(): ");
+    errorToString(error, errorMessage, sizeof errorMessage);
+    Serial.println(errorMessage);
+  }
+
+  // Reloads sensor data from the EEPROM
+  error = scd40.reinit();
+  if (error != NO_ERROR) {
+    Serial.print("Error trying to execute reinit(): ");
+    errorToString(error, errorMessage, sizeof errorMessage);
+    Serial.println(errorMessage);
+  }
+
+  // Read out information about the SCD40
+  error = scd40.getSerialNumber(serialNumber);
+  if (error != NO_ERROR) {
+    Serial.print("Error trying to execute getSerialNumber(): ");
+    errorToString(error, errorMessage, sizeof errorMessage);
+    Serial.println(errorMessage);
+    return;
+  }
+  Serial.print("serial number: ");
+  PrintUint64(serialNumber);
+  Serial.println();
+
+  // Start periodic measurements (5sec interval)
+  error = scd40.startPeriodicMeasurement();
+  if (error != NO_ERROR) {
+    Serial.print("Error trying to execute startPeriodicMeasurement(): ");
+    errorToString(error, errorMessage, sizeof errorMessage);
+    Serial.println(errorMessage);
+    return;
+  }
+
+  // --------TFT-Screen Setup--------
+
+  tft.begin();
+  tft.setRotation(3);
+  tft.cp437(true);
+  tft.fillScreen(0x0000); // Fills the Screen black
+
+  // --------Canvas Setup--------
+
+  SCD40canvas.setTextWrap(false); // In case the Text on the canvas exceeds the canvas it doesnt get wrapped around into the next line
+  SCD40canvas.cp437(true);
+
+  // --------XPT2046 Setup--------
+
+  touch.begin();
+  touch.setRotation(1);
+}
+
+void loop() {
+    fsmupdate();
+}
+
+void PrintUint64(uint64_t &value) {
+  Serial.print("0x");
+  Serial.print((uint32_t)(value >> 32), HEX);
+  Serial.print((uint32_t)(value & 0xFFFFFFFF), HEX);
 }
