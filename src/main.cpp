@@ -4,6 +4,7 @@
 #include <SensirionI2cScd4x.h>
 #include <XPT2046_Touchscreen.h>
 #include <common.h>
+#include <cstdint>
 
 SensirionI2cScd4x scd40;
 Adafruit_ILI9341 tft = Adafruit_ILI9341(TFT_CS, TFT_DC, TFT_RST);
@@ -20,8 +21,8 @@ XXXXppm
 // Global variables
 // ------------------------------------------------------
 
-uint8_t foregroundcolor = 0xFFFF;
-uint8_t backgroundcolor = 0x0000;
+uint16_t foregroundcolor = 0xFFFF;
+uint16_t backgroundcolor = 0x0000;
 bool darkmode = true;
 static char errorMessage[64];
 static int16_t error;
@@ -87,11 +88,33 @@ void updateSCD40() {}
 /* Updates all the sensor and display IC data if in the systemstatus screen*/
 void readSensorStats() {}
 
-/* Maps the coordinates to the screen*/
-void touchMapping() {}
+/* Maps the touchpointcoordinates to the screen's pixels*/
+void touchMapping(uint16_t touchpointX, uint16_t touchpointY, uint16_t *pMappedX, uint16_t *pMappedY) {
+  *pMappedX = map(touchpointX, TOUCH_MIN_X, TOUCH_MAX_X, 0, SCREEN_WIDTH);
+  *pMappedY = map(touchpointY, TOUCH_MIN_Y, TOUCH_MAX_Y, 0, SCREEN_HEIGHT);
+}
 
 /* Prints all the static text and lines on the selected screen*/
-void printStaticText() {}
+void printStaticText() {
+  if (currentState == &mainScreenState) {
+    tft.setTextSize(1);
+    tft.drawRect(BUTTON_X, BUTTON_Y, BUTTON_WIDTH, BUTTON_HEIGHT, Foregroundcolor);          // Darkmode
+    tft.drawRect(BUTTONsyshealth_X, BUTTON_Y, BUTTON_WIDTH, BUTTON_HEIGHT, Foregroundcolor); // System Status
+
+    tft.setTextColor(Foregroundcolor);
+    tft.setCursor(215, BUTTON_Y);
+    tft.print("Switch");
+    tft.setCursor(215, BUTTON_Y + 9);
+    tft.print("Darkmode");
+
+    tft.setCursor(BUTTONsyshealth_X - 13, BUTTON_Y - 13);
+    tft.print("System Status");
+  } else if (currentState == &systemStatusScreenState) {
+
+  } else if (currentState == &airQualityMonitorScreenState) {
+  
+  }
+}
 
 /* Reverses the front- and background colors*/
 void switchDarkmode() {}
@@ -137,7 +160,9 @@ State *airqualitymonitorscreenHandler() {
 // ------------------------------------------------------
 
 State *touchcheckingHandler() {
-    touchMapping();
+  uint16_t mappedX, mappedY;
+  TS_Point touchpoint = touch.getpoint();  
+  touchMapping(touchpoint.x, touchpoint.y, &mappedX, &mappedY);
 
     return &touchCheckingState;
 }
