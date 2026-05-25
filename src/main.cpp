@@ -168,7 +168,7 @@ void setup() {
 
   // --------SCD40 Setup--------
 
-  uint64_t serialnumber = 0;
+  uint64_t serialNumber = 0;
   scd40.begin(Wire, SCD40_I2C_ADDR_62);
   delay(30);
   
