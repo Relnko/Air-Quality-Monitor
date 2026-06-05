@@ -138,9 +138,9 @@ void readWriteSDcard() {
 // ------------------------------------------------------
 
 State* mainscreenHandler() {
-    float temperature = 0.0;
-    float relativeHumidity = 0.0;
-    uint16_t co2Concentration = 0;
+    static float temperature = 0.0;
+    static float relativeHumidity = 0.0;
+    static uint16_t co2Concentration = 0;
 
     printStaticText();
     updateSCD40(&co2Concentration, &temperature, &relativeHumidity);
@@ -156,6 +156,7 @@ State* mainscreenHandler() {
     SCD40canvas.write(0x25);
     SCD40canvas.setCursor(0, 32);
     SCD40canvas.print(co2Concentration);
+    SCD40canvas.print("ppm");
 
     tft.drawBitmap(118, 80, SCD40canvas.getBuffer(), SCD40canvas.width(), SCD40canvas.height(), foregroundcolor, backgroundcolor);
 
@@ -188,7 +189,7 @@ State* airqualitymonitorscreenHandler() {
 }
 
 // ------------------------------------------------------
-// AIRQUALITYMONITOR_SCREEN State
+// TOUCH_CHECKING State
 // ------------------------------------------------------
 
 State* touchcheckingHandler() {
